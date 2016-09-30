@@ -1,6 +1,8 @@
 # gopipe
 A stream-filter like pipeline primitive for go
 
+Godoc documentation: [![GoDoc](https://godoc.org/github.com/urjitbhatia/gopipe?status.svg)](https://godoc.org/github.com/urjitbhatia/gopipe)
+
 Gopipe exposes a simple interface that your "Pipe" must implement:
 ```go
 /*
