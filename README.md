@@ -35,6 +35,8 @@ You can also create a "routing" junction using pipes by using `AttachSinkFanOut`
 The first argument for this is a `map` of `channels` like:
 ```go
 chanfan := make(map[string]chan interface{})
+chanfan["smallishNumber"] = make(chan interface{})
+chanfan["biggishNumber"] = make(chan interface{})
 
 // Create an error/unrouted msg channel
 unroutedChan := make(chan interface{})
