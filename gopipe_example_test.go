@@ -1,32 +1,29 @@
 package gopipe_test
 
 import (
-	. "github.com/urjitbhatia/gopipe"
 	"log"
+
+	. "github.com/urjitbhatia/gopipe"
 )
 
 type ExamplePipe struct{}
 
-func (ep ExamplePipe) Process(in chan interface{}) chan interface{} {
-	out := make(chan interface{})
-	go func() {
-		for {
-			select {
-			case item, more := <-in:
-				if !more {
-					log.Println("Pipe-in closed")
-					close(out)
-					return
-				}
-				if intval, ok := item.(int); ok {
-					out <- intval * 2
-				} else {
-					log.Println("not ok")
-				}
+func (ep ExamplePipe) Process(in chan interface{}, out chan interface{}) {
+	for {
+		select {
+		case item, more := <-in:
+			if !more {
+				log.Println("Pipe-in closed")
+				close(out)
+				return
+			}
+			if intval, ok := item.(int); ok {
+				out <- intval * 2
+			} else {
+				log.Println("not ok")
 			}
 		}
-	}()
-	return out
+	}
 }
 
 func ExamplePipeline() {

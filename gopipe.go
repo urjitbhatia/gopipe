@@ -1,12 +1,14 @@
 package gopipe
 
-import "log"
+import (
+	"log"
+)
 
 /*
 A single pipe component that processes items. Pipes can be composed to form a pipeline
 */
 type Pipe interface {
-	Process(in chan interface{}) chan interface{}
+	Process(in chan interface{}, out chan interface{})
 }
 
 /*
@@ -40,14 +42,45 @@ func (p *Pipeline) Close() {
 AttachSource accepts the source channel as the entry point to the pipeline
 */
 func (p *Pipeline) AttachSource(source chan interface{}) {
-	p.debug("Attaching source channel to pipe")
+	p.debug("Attaching source channel to pipeline")
 	go func() {
 		for item := range source {
 			p.head <- item
 		}
-		p.debug("Pipe source closed. Closing pipeline")
+		p.debug("Pipeline source closed. Closing rest of the pipeline")
 		p.Close()
 		return
+	}()
+}
+
+/*
+AttachTap adds a Tap to the pipeline.
+*/
+func (p *Pipeline) AttachTap(tapOut chan interface{}) {
+	p.debug("Attaching tap to pipeline")
+
+	// Make a new tail for this Pipeline
+	tapTail := p.tail
+	p.tail = make(chan interface{})
+	tap := make(chan interface{})
+	go func() {
+		// read from old tail and send on local tap chan as well as pipeline tail
+		for item := range tapTail {
+			tap <- item
+			p.tail <- item
+		}
+		p.debug("Pipeline tap source closed. Closing rest of the pipeline")
+		close(tap)
+		close(p.tail)
+		return
+	}()
+
+	go func() {
+		// routine that consumes from local tap and queues items at external tap
+		for item := range tap {
+			tapOut <- item
+		}
+		close(tapOut)
 	}()
 }
 
@@ -56,11 +89,12 @@ AttachSink takes a terminating channel and dequeues the messages
 from the pipeline onto that channel.
 */
 func (p *Pipeline) AttachSink(out chan interface{}) {
+	p.debug("Attaching sink to pipeline")
 	go func() {
 		for item := range p.tail {
 			out <- item
 		}
-		p.debug("Shutting down Pipeline Sink")
+		p.debug("Shutting down pipeline Sink")
 		close(out)
 		return
 	}()
@@ -112,19 +146,29 @@ func (p *Pipeline) Debug() {
 }
 
 /*
+Creates a Pipeline with channel buffers set
+*/
+func NewBufferedPipe(s int, pipes ...Pipe) Pipeline {
+	if len(pipes) == 0 {
+		return Pipeline{head: make(chan interface{}), tail: make(chan interface{})}
+	}
+	var tail chan interface{}
+
+	globalHead := make(chan interface{}, s)
+	head := globalHead
+	for _, pipe := range pipes {
+		tail = make(chan interface{}, s)
+		go pipe.Process(head, tail)
+		head = tail
+	}
+	return Pipeline{head: globalHead, tail: tail}
+}
+
+/*
 NewPipeline takes multiple pipes in-order and connects them to form a pipeline.
 Enqueue and Dequeue methods are used to attach source/sink to the pipeline.
 If debugLog is true, logs state transitions to stdout.
 */
 func NewPipeline(pipes ...Pipe) Pipeline {
-	head := make(chan interface{})
-	var connector chan interface{}
-	for _, pipe := range pipes {
-		if connector == nil {
-			connector = pipe.Process(head)
-		} else {
-			connector = pipe.Process(connector)
-		}
-	}
-	return Pipeline{head: head, tail: connector}
+	return NewBufferedPipe(0, pipes...)
 }
