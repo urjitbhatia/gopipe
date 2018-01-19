@@ -9,7 +9,7 @@ Gopipe exposes a simple interface that your "Pipe" must implement:
 A single pipe component that processes items. Pipes can be composed to form a pipeline
 */
 type Pipe interface {
-	Process(in chan interface{}) chan interface{}
+	Process(in chan interface{}, out chan interface{})
 }
 ```
 
@@ -43,7 +43,7 @@ chanfan["biggishNumber"] = make(chan interface{})
 // Create an error/unrouted msg channel
 unroutedChan := make(chan interface{})
 
-// Create a routingFunction satisying the interface: routingFunc func(interface{}) (string, error)
+// Create a routingFunction satisfying the interface: routingFunc func(interface{}) (string, error)
 routingFn := func(val interface{}) (string, error) {
   if val > 10 && val < 100 {
     return "smallishNumber", nil
@@ -66,27 +66,23 @@ To filter, simply don't put it on the `out` chan.
 ```go
 type doublingPipe struct{}
 
-func (dp doublingPipe) Process(in chan interface{}) chan interface{} {
-	out := make(chan interface{})
-	go func() {
-		for {
-			select {
-			case item, more := <-in:
-				if !more {
-					log.Println("Pipe-in closed")
-					close(out)
-					return
-				}
-				if intval, ok := item.(int); ok {
-					out <- intval * 2
-				} else {
-          // This has the effect of "filtering" the input
-          // because its not passed down the pipeline anymore.
-				  log.Println("not ok")
-				}
+func (dp doublingPipe) Process(in chan interface{}, out chan interface{}) {
+	for {
+		select {
+		case item, more := <-in:
+			if !more {
+				log.Println("Pipe-in closed")
+				close(out)
+				return
+			}
+			if intval, ok := item.(int); ok {
+				out <- intval * 2
+			} else {
+      // This has the effect of "filtering" the input
+      // because its not passed down the pipeline anymore.
+			  log.Println("not ok")
 			}
 		}
-	}()
-	return out
+	}
 }
 ```
