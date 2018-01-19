@@ -27,27 +27,24 @@ func (ep ExamplePipe) Process(in chan interface{}, out chan interface{}) {
 }
 
 func ExamplePipeline() {
+	max := 20
 	ep := ExamplePipe{}
 	sp := subtractingPipe{}
 	pipeline := NewPipeline(ep, sp)
 
-	pipeinput := intGenerator(20)
+	pipeinput := intGenerator(max)
 	pipeline.AttachSource(pipeinput)
 
 	pipeout := make(chan interface{})
 	pipeline.AttachSink(pipeout)
 
-	var start = 0
-outloop:
-	for {
+	for i := 0; i < max; i += 1 {
 		select {
 		case val, more := <-pipeout:
 			if !more {
 				pipeout = nil
-				break outloop
 			}
 			log.Println("value is:", val)
-			start++
 		}
 	}
 }

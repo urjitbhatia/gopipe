@@ -5,7 +5,7 @@ import (
 )
 
 /*
-A single pipe component that processes items. Pipes can be composed to form a pipeline
+Pipe is a single component that processes items. Pipes can be composed to form a pipeline
 */
 type Pipe interface {
 	Process(in chan interface{}, out chan interface{})
@@ -22,7 +22,7 @@ type Pipeline struct {
 }
 
 /*
-Enqueue method takes an item one at a time and adds it to the start of the pipeline.
+EnqueueItem takes an item one at a time and adds it to the start of the pipeline.
 Use AttachSource to attach a chan of incoming items to the pipeline
 */
 func (p *Pipeline) EnqueueItem(item interface{}) {
@@ -101,11 +101,11 @@ func (p *Pipeline) AttachSink(out chan interface{}) {
 }
 
 /*
- AttachSinkFanOut redirects outgoing items to the appropriate channel based on the routing function provided.
- Returns a channel where unrouted items are pushed. If the routing function returns a routing key that does not have an associated
- channel provided, the item will be routed to the unrouted channel. Items encountering errors on routing are also put on the unrouted
- channel. Clients of the library should handle unrouted chan properly - if nothing is listening on that chan, operations will block if
- an unroutable item is put on the channel (or until its buffer is full)
+AttachSinkFanOut redirects outgoing items to the appropriate channel based on the routing function provided.
+Returns a channel where unrouted items are pushed. If the routing function returns a routing key that does not have an associated
+channel provided, the item will be routed to the unrouted channel. Items encountering errors on routing are also put on the unrouted
+channel. Clients of the library should handle unrouted chan properly - if nothing is listening on that chan, operations will block if
+an unroutable item is put on the channel (or until its buffer is full)
 */
 func (p *Pipeline) AttachSinkFanOut(chanfan map[string]chan interface{}, unrouted chan interface{}, routingFunc func(interface{}) (string, error)) {
 	go func() {
@@ -139,16 +139,18 @@ func (p *Pipeline) debug(values ...string) {
 }
 
 /*
-Enable debug logging on this pipeline
+Debug enables logging on this pipeline
 */
 func (p *Pipeline) Debug() {
 	p.debugLog = true
 }
 
 /*
-Creates a Pipeline with channel buffers set
+NewBufferedPipeline creates a Pipeline with channel buffers set to the given size.
+This is useful in increasing processing speed. NewPipeline should mostly always
+be tried first.
 */
-func NewBufferedPipe(s int, pipes ...Pipe) Pipeline {
+func NewBufferedPipeline(s int, pipes ...Pipe) Pipeline {
 	if len(pipes) == 0 {
 		return Pipeline{head: make(chan interface{}), tail: make(chan interface{})}
 	}
@@ -170,5 +172,5 @@ Enqueue and Dequeue methods are used to attach source/sink to the pipeline.
 If debugLog is true, logs state transitions to stdout.
 */
 func NewPipeline(pipes ...Pipe) Pipeline {
-	return NewBufferedPipe(0, pipes...)
+	return NewBufferedPipeline(0, pipes...)
 }

@@ -254,7 +254,7 @@ var _ = Describe("Pipeline", func() {
 					max := 10000
 					dp := doublingPipe{}
 					sp := subtractingPipe{}
-					pipeline := NewBufferedPipe(200, dp, sp)
+					pipeline := NewBufferedPipeline(200, dp, sp)
 
 					pipeinput := intGenerator(max)
 					pipeline.AttachSource(pipeinput)
