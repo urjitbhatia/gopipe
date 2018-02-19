@@ -1,7 +1,6 @@
 package gopipe
 
 import (
-	"fmt"
 	"log"
 	"time"
 )
@@ -25,7 +24,7 @@ type Pipeline struct {
 }
 
 /*
-EnqueueItem takes an item one at a time and adds it to the start of the pipeline.
+Enqueue takes an item one at a time and adds it to the start of the pipeline.
 Use AttachSource to attach a chan of incoming items to the pipeline.
 If the pipeline is blocked, this is going to be a blocking operation
 */
@@ -34,14 +33,14 @@ func (p *Pipeline) Enqueue(item interface{}) {
 }
 
 /*
-DequeueItem will block till an item is available and then dequeue from the pipeline.
+Dequeue will block till an item is available and then dequeue from the pipeline.
 */
 func (p *Pipeline) Dequeue() interface{} {
 	return <-p.tail
 }
 
 /*
-DequeueItemWithTimeout will block till an item is available and then dequeue from the pipeline.
+DequeueTimeout will block till an item is available and then dequeue from the pipeline.
 */
 func (p *Pipeline) DequeueTimeout(t time.Duration) interface{} {
 	timeout := make(chan bool, 1)
@@ -74,10 +73,13 @@ func (p *Pipeline) String() {
 		p.tail, p.debugLog)
 }
 
+/*
+AddPipe attaches a pipe to the end of the pipeline.
+This will immediately start routing items to this newly attached pipe
+*/
 func (p *Pipeline) AddPipe(pipe Pipe) {
 	oldTail := p.tail
 	newTail := make(chan interface{}, p.bufferSize)
-	p.debug(fmt.Sprintf("Adding new pipe: %#v", pipe))
 	go pipe.Process(oldTail, newTail)
 	p.tail = newTail
 }
