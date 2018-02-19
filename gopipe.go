@@ -1,7 +1,9 @@
 package gopipe
 
 import (
+	"fmt"
 	"log"
+	"time"
 )
 
 /*
@@ -16,17 +18,44 @@ Pipeline connects multiple pipes in order. The head chan receives incoming items
 and tail chan send out items that the pipeline has finished processing.
 */
 type Pipeline struct {
-	head     chan interface{} // Chan representing the head of the pipeline
-	tail     chan interface{} // Chan representing the tail of the pipeline
-	debugLog bool             // Option to log pipeline state transitions, false by default
+	bufferSize int              // Chan buffer size
+	head       chan interface{} // Chan representing the head of the pipeline
+	tail       chan interface{} // Chan representing the tail of the pipeline
+	debugLog   bool             // Option to log pipeline state transitions, false by default
 }
 
 /*
 EnqueueItem takes an item one at a time and adds it to the start of the pipeline.
 Use AttachSource to attach a chan of incoming items to the pipeline
 */
-func (p *Pipeline) EnqueueItem(item interface{}) {
+func (p *Pipeline) Enqueue(item interface{}) {
 	p.head <- item
+}
+
+/*
+DequeueItem will block till an item is available and then dequeue from the pipeline.
+*/
+func (p *Pipeline) Dequeue() interface{} {
+	return <-p.tail
+}
+
+/*
+DequeueItemWithTimeout will block till an item is available and then dequeue from the pipeline.
+*/
+func (p *Pipeline) DequeueTimeout(t time.Duration) interface{} {
+	timeout := make(chan bool, 1)
+	go func() {
+		time.Sleep(t)
+		timeout <- true
+	}()
+	select {
+	case item := <-p.tail:
+		// a read from tail has occurred
+		return item
+	case <-timeout:
+		// the read has timed out
+		return nil
+	}
 }
 
 /*
@@ -36,6 +65,14 @@ cause a panic - can't write to a closed channel
 */
 func (p *Pipeline) Close() {
 	close(p.head)
+}
+
+func (p *Pipeline) AddPipe(pipe Pipe) {
+	oldTail := p.tail
+	newTail := make(chan interface{}, p.bufferSize)
+	p.debug(fmt.Sprintf("Adding new pipe: %#v", pipe))
+	go pipe.Process(oldTail, newTail)
+	p.tail = newTail
 }
 
 /*
@@ -152,7 +189,18 @@ be tried first.
 */
 func NewBufferedPipeline(s int, pipes ...Pipe) Pipeline {
 	if len(pipes) == 0 {
-		return Pipeline{head: make(chan interface{}), tail: make(chan interface{})}
+		// Without pipes, just join head and tail
+		p := Pipeline{
+			bufferSize: s,
+			head:       make(chan interface{}, s),
+			tail:       make(chan interface{}, s),
+		}
+		go func() {
+			for item := range p.head {
+				p.tail <- item
+			}
+		}()
+		return p
 	}
 	var tail chan interface{}
 
@@ -163,7 +211,7 @@ func NewBufferedPipeline(s int, pipes ...Pipe) Pipeline {
 		go pipe.Process(head, tail)
 		head = tail
 	}
-	return Pipeline{head: globalHead, tail: tail}
+	return Pipeline{bufferSize: s, head: globalHead, tail: tail}
 }
 
 /*

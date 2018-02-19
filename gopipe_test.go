@@ -2,98 +2,34 @@ package gopipe_test
 
 import (
 	"log"
+	"time"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 	. "github.com/urjitbhatia/gopipe"
 )
 
-type doublingPipe struct{}
-
-func (dp doublingPipe) Process(in chan interface{}, out chan interface{}) {
-	for {
-		select {
-		case item, more := <-in:
-			if !more {
-				log.Println("Pipe-in closed")
-				close(out)
-				return
-			}
-			if intval, ok := item.(int); ok {
-				out <- intval * 2
-			} else {
-				log.Println("not ok")
-			}
-		}
-	}
-}
-
-type subtractingPipe struct{}
-
-func (sp subtractingPipe) Process(in chan interface{}, out chan interface{}) {
-	for {
-		select {
-		case item, more := <-in:
-			if !more {
-				log.Println("Pipe-in closed")
-				close(out)
-				return
-			}
-			if intval, ok := item.(int); ok {
-				out <- intval - 1
-			} else {
-				log.Println("not ok")
-			}
-		}
-	}
-}
-
-func intGenerator(limit int) (out chan interface{}) {
-	out = make(chan interface{})
-	go func() {
-		defer close(out)
-		for i := 0; i < limit; i++ {
-			out <- i
-		}
-	}()
-	return
-}
-
-type pluralizingPipe struct{}
-
-func (pp pluralizingPipe) Process(in chan interface{}, out chan interface{}) {
-	for {
-		select {
-		case item, more := <-in:
-			if !more {
-				log.Println("Pipe-in closed")
-				close(out)
-				return
-			}
-			if strVal, ok := item.(string); ok {
-				out <- strVal + "s"
-			} else {
-				log.Println("unknown")
-			}
-		}
-	}
-}
-
-func animalGenerator(limit int) (out chan interface{}) {
-	out = make(chan interface{})
-	animals := []string{"cat", "dog", "toad", "dinosaur"}
-	go func() {
-		defer close(out)
-		for i := 0; i < limit; i++ {
-			out <- animals[i%len(animals)]
-		}
-	}()
-	return
-}
-
 var _ = Describe("Pipeline", func() {
 	log.SetOutput(GinkgoWriter)
-	Describe("Pipeline with a single pipe", func() {
+	Describe("without pipes", func() {
+		It("is just a channel", func() {
+			p := NewPipeline()
+			p.Enqueue("foo")
+			Eventually(p.Dequeue()).Should(Equal("foo"))
+			Expect(p.DequeueTimeout(1 * time.Millisecond)).Should(BeNil())
+		})
+
+		It("is just a channel with the right buffer size", func() {
+			p := NewBufferedPipeline(2)
+			p.Enqueue("foo")
+			p.Enqueue("bar")
+			Eventually(p.Dequeue()).Should(Equal("foo"))
+			Eventually(p.Dequeue()).Should(Equal("bar"))
+			Expect(p.DequeueTimeout(1 * time.Millisecond)).Should(BeNil())
+		})
+	})
+
+	Describe("Pipeline with test stub pipes", func() {
 		Context("Enque items", func() {
 			It("Dequeue", func() {
 				max := 20
@@ -172,7 +108,7 @@ var _ = Describe("Pipeline", func() {
 				go func() {
 					for animal := range pipeinput {
 						// Drain input and enque one by one
-						pipeline.EnqueueItem(animal)
+						pipeline.Enqueue(animal)
 					}
 					pipeline.Close()
 					return
@@ -244,6 +180,20 @@ var _ = Describe("Pipeline", func() {
 					Expect(outVal).To(Equal((start * 2) - 1))
 				}
 			})
+		})
+	})
+
+	Describe("Add Pipe iterface", func() {
+		It("works", func() {
+			p := NewPipeline()
+			p.Debug()
+			// Add two doubling pipes
+			p.AddPipe(doublingPipe{})
+			p.AddPipe(doublingPipe{})
+
+			go p.Enqueue(2)
+
+			Eventually(p.Dequeue()).Should(Equal(8))
 		})
 	})
 
