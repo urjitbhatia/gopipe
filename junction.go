@@ -9,6 +9,11 @@ type Junction struct {
 	in        chan interface{}
 }
 
-func (j *Junction) AddPipeline(key interface{}, p *Pipeline) {
+/*
+AddPipeline adds a pipeline to a junction. Items that output the given key
+when fed into the routing function for this junction are routed the given pipeline
+*/
+func (j *Junction) AddPipeline(key interface{}, p *Pipeline) *Junction {
 	j.router[key] = p
+	return j
 }

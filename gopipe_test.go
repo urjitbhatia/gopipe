@@ -24,8 +24,8 @@ var _ = Describe("Pipeline", func() {
 			p := NewBufferedPipeline(2)
 			p.Enqueue("foo")
 			p.Enqueue("bar")
-			Eventually(p.Dequeue).Should(Equal("foo"))
-			Eventually(p.Dequeue).Should(Equal("bar"))
+			Expect(p.Dequeue()).Should(Equal("foo"))
+			Expect(p.Dequeue()).Should(Equal("bar"))
 			Expect(p.DequeueTimeout(1 * time.Millisecond)).Should(BeNil())
 			p.Close()
 		})
@@ -188,11 +188,10 @@ var _ = Describe("Pipeline", func() {
 		It("works", func() {
 			p := NewPipeline()
 			// Add two doubling pipes
-			p.AddPipe(doublingPipe{})
-			p.AddPipe(doublingPipe{})
+			p.AddPipe(doublingPipe{}).AddPipe(doublingPipe{})
 			p.Enqueue(2)
 
-			Eventually(p.Dequeue).Should(Equal(8))
+			Expect(p.Dequeue()).Should(Equal(8))
 		})
 		It("is easy to add junctions", func() {
 			pOne := NewPipeline()
@@ -212,14 +211,13 @@ var _ = Describe("Pipeline", func() {
 			pTwoOdd := NewPipeline()
 			pTwoOdd.AddPipe(doublingPipe{})
 
-			j.AddPipeline("even", pTwoEven)
-			j.AddPipeline("odd", pTwoOdd)
+			j.AddPipeline("even", pTwoEven).AddPipeline("odd", pTwoOdd)
 
 			pOne.Enqueue(3)
-			Eventually(pTwoEven.Dequeue).Should(Equal(1))
+			Expect(pTwoEven.Dequeue()).Should(Equal(1))
 
 			pOne.Enqueue(2)
-			Eventually(pTwoOdd.Dequeue).Should(Equal(2))
+			Expect(pTwoOdd.Dequeue()).Should(Equal(2))
 		})
 
 		It("junction keeps works with bad routing fn", func() {
@@ -244,12 +242,55 @@ var _ = Describe("Pipeline", func() {
 			j.AddPipeline("this should've said odd", pTwoOdd)
 
 			pOne.Enqueue(3)
-			Eventually(pTwoEven.Dequeue).Should(Equal(1))
+			Expect(pTwoEven.Dequeue()).Should(Equal(1))
 
 			pOne.Enqueue(2)
 			Eventually(func() interface{} {
 				return pTwoOdd.DequeueTimeout(1 * time.Millisecond)
 			}).ShouldNot(Equal(2))
+		})
+
+		It("works with multiple junctions in the pipeline", func() {
+			/*
+														|J| > 3	|-> double
+								 |J|even	|-> double	|J| <=3	|-> subtract
+				in -> subtract 1 |J|
+								 |J|odd		|-> subtract
+			*/
+			p := NewPipeline(subtractingPipe{})
+
+			pTwoEven := NewPipeline(doublingPipe{})
+			pTwoOdd := NewPipeline(subtractingPipe{})
+
+			pThreeGt := NewPipeline(doublingPipe{})
+			pThreeLe := NewPipeline(subtractingPipe{})
+
+			evenOddFn := func(val interface{}) interface{} {
+				if i, _ := val.(int); i%2 == 0 {
+					return "even"
+				}
+				return "odd"
+			}
+
+			jOne := p.AddJunction(evenOddFn)
+			jOne.AddPipeline("even", pTwoEven).AddPipeline("odd", pTwoOdd)
+
+			greaterThan3Fn := func(val interface{}) interface{} {
+				if i, _ := val.(int); i > 3 {
+					return true
+				}
+				return false
+			}
+			jTwo := pTwoEven.AddJunction(greaterThan3Fn)
+			jTwo.AddPipeline(true, pThreeGt).AddPipeline(false, pThreeLe)
+
+			p.Enqueue(3)
+			Expect(pThreeGt.Dequeue()).Should(Equal(8))
+			p.Enqueue(1)
+			Expect(pThreeLe.Dequeue()).Should(Equal(-1))
+
+			p.Enqueue(2)
+			Expect(pTwoOdd.Dequeue()).Should(Equal(0))
 		})
 	})
 

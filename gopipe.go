@@ -78,11 +78,12 @@ func (p *Pipeline) String() {
 AddPipe attaches a pipe to the end of the pipeline.
 This will immediately start routing items to this newly attached pipe
 */
-func (p *Pipeline) AddPipe(pipe Pipe) {
+func (p *Pipeline) AddPipe(pipe Pipe) *Pipeline {
 	oldTail := p.tail
 	newTail := make(chan interface{}, p.bufferSize)
 	go pipe.Process(oldTail, newTail)
 	p.tail = newTail
+	return p
 }
 
 func (p *Pipeline) AddJunction(fn func(val interface{}) interface{}) *Junction {
@@ -91,7 +92,7 @@ func (p *Pipeline) AddJunction(fn func(val interface{}) interface{}) *Junction {
 	go func() {
 		for item := range j.in {
 			routingKey := fn(item)
-			p.debug("routing key:", routingKey.(string))
+			p.debug(fmt.Sprintf("routing key: %v", routingKey))
 			if dest, ok := j.router[routingKey]; ok {
 				dest.Enqueue(item)
 			} else {
