@@ -95,7 +95,6 @@ func (p *Pipeline) AttachSource(source chan interface{}) {
 		}
 		p.debug("Pipeline source closed. Closing rest of the pipeline")
 		p.Close()
-		return
 	}()
 }
 
@@ -118,7 +117,6 @@ func (p *Pipeline) AttachTap(tapOut chan interface{}) {
 		p.debug("Pipeline tap source closed. Closing rest of the pipeline")
 		close(tap)
 		close(p.tail)
-		return
 	}()
 
 	go func() {
@@ -142,7 +140,6 @@ func (p *Pipeline) AttachSink(out chan interface{}) {
 		}
 		p.debug("Shutting down pipeline Sink")
 		close(out)
-		return
 	}()
 }
 
@@ -170,9 +167,7 @@ func (p *Pipeline) AttachSinkFanOut(chanfan map[string]chan interface{}, unroute
 			close(fanoutChan)
 		}
 		close(unrouted)
-		return
 	}()
-	return
 }
 
 /*

@@ -1,25 +1,12 @@
 package gopipe_test
 
 import (
-	"bytes"
-	"io"
-	"log"
-	"os"
 	"time"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 	. "github.com/urjitbhatia/gopipe"
 )
-
-func wrapStdout(fn func()) string {
-	var buf bytes.Buffer
-	mw := io.MultiWriter(os.Stdout, &buf)
-	log.SetOutput(mw)
-	fn()
-	log.SetOutput(GinkgoWriter)
-	return buf.String()
-}
 
 var _ = Describe("Pipeline", func() {
 	// log.SetOutput(GinkgoWriter)
@@ -124,7 +111,6 @@ var _ = Describe("Pipeline", func() {
 						pipeline.Enqueue(animal)
 					}
 					pipeline.Close()
-					return
 				}()
 
 				fanout := make(map[string]chan interface{})
@@ -224,13 +210,7 @@ var _ = Describe("Pipeline", func() {
 					pipeline.AttachSink(pipeout)
 
 					for start := 0; start < max; start += 1 {
-						select {
-						case val, more := <-pipeout:
-							if !more {
-								pipeout = nil
-							}
-							Expect(val).To(Equal((start * 2) - 1))
-						}
+						Expect(<-pipeout).To(Equal((start * 2) - 1))
 					}
 				})
 

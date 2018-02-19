@@ -9,19 +9,11 @@ import (
 type ExamplePipe struct{}
 
 func (ep ExamplePipe) Process(in chan interface{}, out chan interface{}) {
-	for {
-		select {
-		case item, more := <-in:
-			if !more {
-				log.Println("Pipe-in closed")
-				close(out)
-				return
-			}
-			if intval, ok := item.(int); ok {
-				out <- intval * 2
-			} else {
-				log.Println("not ok")
-			}
+	for item := range in {
+		if intval, ok := item.(int); ok {
+			out <- intval * 2
+		} else {
+			log.Println("not ok")
 		}
 	}
 }
@@ -39,12 +31,6 @@ func ExamplePipeline() {
 	pipeline.AttachSink(pipeout)
 
 	for i := 0; i < max; i += 1 {
-		select {
-		case val, more := <-pipeout:
-			if !more {
-				pipeout = nil
-			}
-			log.Println("value is:", val)
-		}
+		log.Println("value is:", <-pipeout)
 	}
 }
