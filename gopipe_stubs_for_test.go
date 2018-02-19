@@ -11,7 +11,6 @@ func (dp doublingPipe) Process(in chan interface{}, out chan interface{}) {
 		select {
 		case item, more := <-in:
 			if !more {
-				log.Println("Pipe-in closed")
 				close(out)
 				return
 			}
@@ -31,7 +30,6 @@ func (sp subtractingPipe) Process(in chan interface{}, out chan interface{}) {
 		select {
 		case item, more := <-in:
 			if !more {
-				log.Println("Pipe-in closed")
 				close(out)
 				return
 			}
@@ -62,7 +60,6 @@ func (pp pluralizingPipe) Process(in chan interface{}, out chan interface{}) {
 		select {
 		case item, more := <-in:
 			if !more {
-				log.Println("Pipe-in closed")
 				close(out)
 				return
 			}

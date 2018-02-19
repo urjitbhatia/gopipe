@@ -26,7 +26,8 @@ type Pipeline struct {
 
 /*
 EnqueueItem takes an item one at a time and adds it to the start of the pipeline.
-Use AttachSource to attach a chan of incoming items to the pipeline
+Use AttachSource to attach a chan of incoming items to the pipeline.
+If the pipeline is blocked, this is going to be a blocking operation
 */
 func (p *Pipeline) Enqueue(item interface{}) {
 	p.head <- item
@@ -65,6 +66,12 @@ cause a panic - can't write to a closed channel
 */
 func (p *Pipeline) Close() {
 	close(p.head)
+}
+
+// String prints a helpful debug state of the pipeline
+func (p *Pipeline) String() {
+	log.Printf("BufferSize: %d Head: %v Tail: %v DebugMode: %t", p.bufferSize, p.head,
+		p.tail, p.debugLog)
 }
 
 func (p *Pipeline) AddPipe(pipe Pipe) {
@@ -187,20 +194,15 @@ NewBufferedPipeline creates a Pipeline with channel buffers set to the given siz
 This is useful in increasing processing speed. NewPipeline should mostly always
 be tried first.
 */
-func NewBufferedPipeline(s int, pipes ...Pipe) Pipeline {
+func NewBufferedPipeline(s int, pipes ...Pipe) *Pipeline {
 	if len(pipes) == 0 {
 		// Without pipes, just join head and tail
-		p := Pipeline{
+		h := make(chan interface{}, s)
+		return &Pipeline{
 			bufferSize: s,
-			head:       make(chan interface{}, s),
-			tail:       make(chan interface{}, s),
+			head:       h,
+			tail:       h,
 		}
-		go func() {
-			for item := range p.head {
-				p.tail <- item
-			}
-		}()
-		return p
 	}
 	var tail chan interface{}
 
@@ -211,7 +213,7 @@ func NewBufferedPipeline(s int, pipes ...Pipe) Pipeline {
 		go pipe.Process(head, tail)
 		head = tail
 	}
-	return Pipeline{bufferSize: s, head: globalHead, tail: tail}
+	return &Pipeline{bufferSize: s, head: globalHead, tail: tail}
 }
 
 /*
@@ -219,6 +221,6 @@ NewPipeline takes multiple pipes in-order and connects them to form a pipeline.
 Enqueue and Dequeue methods are used to attach source/sink to the pipeline.
 If debugLog is true, logs state transitions to stdout.
 */
-func NewPipeline(pipes ...Pipe) Pipeline {
+func NewPipeline(pipes ...Pipe) *Pipeline {
 	return NewBufferedPipeline(0, pipes...)
 }

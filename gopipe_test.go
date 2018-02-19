@@ -1,7 +1,10 @@
 package gopipe_test
 
 import (
+	"bytes"
+	"io"
 	"log"
+	"os"
 	"time"
 
 	. "github.com/onsi/ginkgo"
@@ -9,12 +12,21 @@ import (
 	. "github.com/urjitbhatia/gopipe"
 )
 
-var _ = Describe("Pipeline", func() {
+func wrapStdout(fn func()) string {
+	var buf bytes.Buffer
+	mw := io.MultiWriter(os.Stdout, &buf)
+	log.SetOutput(mw)
+	fn()
 	log.SetOutput(GinkgoWriter)
+	return buf.String()
+}
+
+var _ = Describe("Pipeline", func() {
+	// log.SetOutput(GinkgoWriter)
 	Describe("without pipes", func() {
 		It("is just a channel", func() {
 			p := NewPipeline()
-			p.Enqueue("foo")
+			go p.Enqueue("foo")
 			Eventually(p.Dequeue()).Should(Equal("foo"))
 			Expect(p.DequeueTimeout(1 * time.Millisecond)).Should(BeNil())
 		})
@@ -26,6 +38,7 @@ var _ = Describe("Pipeline", func() {
 			Eventually(p.Dequeue()).Should(Equal("foo"))
 			Eventually(p.Dequeue()).Should(Equal("bar"))
 			Expect(p.DequeueTimeout(1 * time.Millisecond)).Should(BeNil())
+			p.Close()
 		})
 	})
 
@@ -186,12 +199,10 @@ var _ = Describe("Pipeline", func() {
 	Describe("Add Pipe iterface", func() {
 		It("works", func() {
 			p := NewPipeline()
-			p.Debug()
 			// Add two doubling pipes
 			p.AddPipe(doublingPipe{})
 			p.AddPipe(doublingPipe{})
-
-			go p.Enqueue(2)
+			p.Enqueue(2)
 
 			Eventually(p.Dequeue()).Should(Equal(8))
 		})
