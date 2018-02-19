@@ -1,6 +1,7 @@
 package gopipe_test
 
 import (
+	"log"
 	"time"
 
 	. "github.com/onsi/ginkgo"
@@ -9,12 +10,13 @@ import (
 )
 
 var _ = Describe("Pipeline", func() {
-	// log.SetOutput(GinkgoWriter)
+	log.SetOutput(GinkgoWriter)
+
 	Describe("without pipes", func() {
 		It("is just a channel", func() {
 			p := NewPipeline()
 			go p.Enqueue("foo")
-			Eventually(p.Dequeue()).Should(Equal("foo"))
+			Eventually(p.Dequeue).Should(Equal("foo"))
 			Expect(p.DequeueTimeout(1 * time.Millisecond)).Should(BeNil())
 		})
 
@@ -22,8 +24,8 @@ var _ = Describe("Pipeline", func() {
 			p := NewBufferedPipeline(2)
 			p.Enqueue("foo")
 			p.Enqueue("bar")
-			Eventually(p.Dequeue()).Should(Equal("foo"))
-			Eventually(p.Dequeue()).Should(Equal("bar"))
+			Eventually(p.Dequeue).Should(Equal("foo"))
+			Eventually(p.Dequeue).Should(Equal("bar"))
 			Expect(p.DequeueTimeout(1 * time.Millisecond)).Should(BeNil())
 			p.Close()
 		})
@@ -190,7 +192,64 @@ var _ = Describe("Pipeline", func() {
 			p.AddPipe(doublingPipe{})
 			p.Enqueue(2)
 
-			Eventually(p.Dequeue()).Should(Equal(8))
+			Eventually(p.Dequeue).Should(Equal(8))
+		})
+		It("is easy to add junctions", func() {
+			pOne := NewPipeline()
+
+			pOne.AddPipe(subtractingPipe{})
+			routingFn := func(val interface{}) interface{} {
+				i, _ := val.(int)
+				if i%2 == 0 {
+					return "even"
+				}
+				return "odd"
+			}
+			j := pOne.AddJunction(routingFn)
+			pTwoEven := NewPipeline()
+			pTwoEven.AddPipe(subtractingPipe{})
+
+			pTwoOdd := NewPipeline()
+			pTwoOdd.AddPipe(doublingPipe{})
+
+			j.AddPipeline("even", pTwoEven)
+			j.AddPipeline("odd", pTwoOdd)
+
+			pOne.Enqueue(3)
+			Eventually(pTwoEven.Dequeue).Should(Equal(1))
+
+			pOne.Enqueue(2)
+			Eventually(pTwoOdd.Dequeue).Should(Equal(2))
+		})
+
+		It("junction keeps works with bad routing fn", func() {
+			pOne := NewPipeline()
+
+			pOne.AddPipe(subtractingPipe{})
+			routingFn := func(val interface{}) interface{} {
+				i, _ := val.(int)
+				if i%2 == 0 {
+					return "even"
+				}
+				return "odd"
+			}
+			j := pOne.AddJunction(routingFn)
+			pTwoEven := NewPipeline()
+			pTwoEven.AddPipe(subtractingPipe{})
+
+			pTwoOdd := NewPipeline()
+			pTwoOdd.AddPipe(doublingPipe{})
+
+			j.AddPipeline("even", pTwoEven)
+			j.AddPipeline("this should've said odd", pTwoOdd)
+
+			pOne.Enqueue(3)
+			Eventually(pTwoEven.Dequeue).Should(Equal(1))
+
+			pOne.Enqueue(2)
+			Eventually(func() interface{} {
+				return pTwoOdd.DequeueTimeout(1 * time.Millisecond)
+			}).ShouldNot(Equal(2))
 		})
 	})
 
@@ -214,7 +273,7 @@ var _ = Describe("Pipeline", func() {
 					}
 				})
 
-				Ω(runtime.Seconds()).Should(BeNumerically("<", 0.5), "Shouldn't take more than 0.5 sec for 10000 ops")
+				Ω(runtime.Seconds()).Should(BeNumerically("<", 0.5), "Shouldn't take more than 0.5 sec for 10000 items")
 			}, 500)
 		})
 	})

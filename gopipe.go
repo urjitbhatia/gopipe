@@ -1,6 +1,7 @@
 package gopipe
 
 import (
+	"fmt"
 	"log"
 	"time"
 )
@@ -82,6 +83,24 @@ func (p *Pipeline) AddPipe(pipe Pipe) {
 	newTail := make(chan interface{}, p.bufferSize)
 	go pipe.Process(oldTail, newTail)
 	p.tail = newTail
+}
+
+func (p *Pipeline) AddJunction(fn func(val interface{}) interface{}) *Junction {
+	j := Junction{routingFn: fn, router: make(map[interface{}]*Pipeline)}
+	j.in = p.tail
+	go func() {
+		for item := range j.in {
+			routingKey := fn(item)
+			p.debug("routing key:", routingKey.(string))
+			if dest, ok := j.router[routingKey]; ok {
+				dest.Enqueue(item)
+			} else {
+				p.debug(fmt.Sprintf("Junction discarding item: %+v no dest pipeline for routing key: %+v",
+					item, routingKey))
+			}
+		}
+	}()
+	return &j
 }
 
 /*
