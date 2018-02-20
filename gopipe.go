@@ -1,7 +1,6 @@
 package gopipe
 
 import (
-	"fmt"
 	"log"
 	"time"
 )
@@ -21,7 +20,7 @@ type Pipeline struct {
 	bufferSize int              // Chan buffer size
 	head       chan interface{} // Chan representing the head of the pipeline
 	tail       chan interface{} // Chan representing the tail of the pipeline
-	debugLog   bool             // Option to log pipeline state transitions, false by default
+	DebugMode  bool             // Option to log pipeline state transitions, false by default
 }
 
 /*
@@ -71,7 +70,7 @@ func (p *Pipeline) Close() {
 // String prints a helpful debug state of the pipeline
 func (p *Pipeline) String() {
 	log.Printf("BufferSize: %d Head: %v Tail: %v DebugMode: %t", p.bufferSize, p.head,
-		p.tail, p.debugLog)
+		p.tail, p.DebugMode)
 }
 
 /*
@@ -86,22 +85,12 @@ func (p *Pipeline) AddPipe(pipe Pipe) *Pipeline {
 	return p
 }
 
-func (p *Pipeline) AddJunction(fn RoutingFunc) *Junction {
-	j := Junction{routingFn: fn, router: make(map[interface{}]*Pipeline)}
-	j.in = p.tail
-	go func() {
-		for item := range j.in {
-			routingKey := fn(item)
-			p.debug(fmt.Sprintf("routing key: %v", routingKey))
-			if dest, ok := j.router[routingKey]; ok {
-				dest.Enqueue(item)
-			} else {
-				p.debug(fmt.Sprintf("Junction discarding item: %+v no dest pipeline for routing key: %+v",
-					item, routingKey))
-			}
-		}
-	}()
-	return &j
+/*
+AddJunction creates a new Junction to this pipeline and immediately start routing
+to that junction
+*/
+func (p *Pipeline) AddJunction(j Junction) {
+	j.route(p.tail)
 }
 
 /*
@@ -115,36 +104,6 @@ func (p *Pipeline) AttachSource(source chan interface{}) {
 		}
 		p.debug("Pipeline source closed. Closing rest of the pipeline")
 		p.Close()
-	}()
-}
-
-/*
-AttachTap adds a Tap to the pipeline.
-*/
-func (p *Pipeline) AttachTap(tapOut chan interface{}) {
-	p.debug("Attaching tap to pipeline")
-
-	// Make a new tail for this Pipeline
-	tapTail := p.tail
-	p.tail = make(chan interface{})
-	tap := make(chan interface{})
-	go func() {
-		// read from old tail and send on local tap chan as well as pipeline tail
-		for item := range tapTail {
-			tap <- item
-			p.tail <- item
-		}
-		p.debug("Pipeline tap source closed. Closing rest of the pipeline")
-		close(tap)
-		close(p.tail)
-	}()
-
-	go func() {
-		// routine that consumes from local tap and queues items at external tap
-		for item := range tap {
-			tapOut <- item
-		}
-		close(tapOut)
 	}()
 }
 
@@ -164,46 +123,12 @@ func (p *Pipeline) AttachSink(out chan interface{}) {
 }
 
 /*
-AttachSinkFanOut redirects outgoing items to the appropriate channel based on the routing function provided.
-Returns a channel where unrouted items are pushed. If the routing function returns a routing key that does not have an associated
-channel provided, the item will be routed to the unrouted channel. Items encountering errors on routing are also put on the unrouted
-channel. Clients of the library should handle unrouted chan properly - if nothing is listening on that chan, operations will block if
-an unroutable item is put on the channel (or until its buffer is full)
-*/
-func (p *Pipeline) AttachSinkFanOut(chanfan map[string]chan interface{}, unrouted chan interface{}, routingFunc func(interface{}) (string, error)) {
-	go func() {
-		for item := range p.tail {
-			key, err := routingFunc(item)
-			routeChan, ok := chanfan[key]
-			if err != nil || key == "" || !ok {
-				routeChan = unrouted
-			}
-			routeChan <- item
-		}
-		p.debug("Shutting down Pipeline ChanFans")
-		for key, fanoutChan := range chanfan {
-			// Close all outgoing channels
-			p.debug("Closing channel for routing key:", key)
-			close(fanoutChan)
-		}
-		close(unrouted)
-	}()
-}
-
-/*
 debug Prints log statements if debugLog is true
 */
 func (p *Pipeline) debug(values ...string) {
-	if p.debugLog {
+	if p.DebugMode {
 		log.Println(values)
 	}
-}
-
-/*
-Debug enables logging on this pipeline
-*/
-func (p *Pipeline) Debug() {
-	p.debugLog = true
 }
 
 /*

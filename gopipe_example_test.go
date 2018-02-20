@@ -64,7 +64,7 @@ func ExamplePipelineJunction() {
 		}
 		return "small"
 	})
-	j := p.AddJunction(rf)
+	j := NewJunction(rf)
 
 	dp := NewPipeline(doublingPipe{})
 	sp := NewPipeline(subtractingPipe{})
@@ -72,6 +72,7 @@ func ExamplePipelineJunction() {
 	// If input is "small" send to doublingPipeline
 	// If input is "big" send to subtractingPipeline
 	j.AddPipeline("small", dp).AddPipeline("big", sp)
+	p.AddJunction(j)
 
 	for i := range intGenerator(max) {
 		p.Enqueue(i)

@@ -38,7 +38,7 @@ var _ = Describe("Pipeline", func() {
 				dp := doublingPipe{}
 				sp := subtractingPipe{}
 				pipeline := NewPipeline(dp, sp)
-				pipeline.Debug()
+				pipeline.DebugMode = true
 
 				pipeinput := intGenerator(max)
 				pipeline.AttachSource(pipeinput)
@@ -163,7 +163,7 @@ var _ = Describe("Pipeline", func() {
 				// A second doubling pipe that we will attach to a tap
 				sp := subtractingPipe{}
 				pipeline := NewPipeline(dp, sp)
-				pipeline.Debug()
+				pipeline.DebugMode = true
 
 				pipeinput := intGenerator(max)
 				pipeline.AttachSource(pipeinput)
@@ -204,7 +204,7 @@ var _ = Describe("Pipeline", func() {
 				}
 				return "odd"
 			}
-			j := pOne.AddJunction(routingFn)
+			j := NewJunction(RoutingFunc(routingFn))
 			pTwoEven := NewPipeline()
 			pTwoEven.AddPipe(subtractingPipe{})
 
@@ -212,6 +212,7 @@ var _ = Describe("Pipeline", func() {
 			pTwoOdd.AddPipe(doublingPipe{})
 
 			j.AddPipeline("even", pTwoEven).AddPipeline("odd", pTwoOdd)
+			pOne.AddJunction(j)
 
 			pOne.Enqueue(3)
 			Expect(pTwoEven.Dequeue()).Should(Equal(1))
@@ -224,14 +225,14 @@ var _ = Describe("Pipeline", func() {
 			pOne := NewPipeline()
 
 			pOne.AddPipe(subtractingPipe{})
-			routingFn := RoutingFunc(func(val interface{}) interface{} {
+			routingFn := func(val interface{}) interface{} {
 				i, _ := val.(int)
 				if i%2 == 0 {
 					return "even"
 				}
 				return "odd"
-			})
-			j := pOne.AddJunction(routingFn)
+			}
+			j := NewJunction(RoutingFunc(routingFn))
 			pTwoEven := NewPipeline()
 			pTwoEven.AddPipe(subtractingPipe{})
 
@@ -240,6 +241,7 @@ var _ = Describe("Pipeline", func() {
 
 			j.AddPipeline("even", pTwoEven)
 			j.AddPipeline("this should've said odd", pTwoOdd)
+			pOne.AddJunction(j)
 
 			pOne.Enqueue(3)
 			Expect(pTwoEven.Dequeue()).Should(Equal(1))
@@ -272,8 +274,9 @@ var _ = Describe("Pipeline", func() {
 				return "odd"
 			})
 
-			jOne := p.AddJunction(evenOddFn)
+			jOne := NewJunction(evenOddFn)
 			jOne.AddPipeline("even", pTwoEven).AddPipeline("odd", pTwoOdd)
+			p.AddJunction(jOne)
 
 			greaterThan3Fn := RoutingFunc(func(val interface{}) interface{} {
 				if i, _ := val.(int); i > 3 {
@@ -282,8 +285,9 @@ var _ = Describe("Pipeline", func() {
 				return false
 			})
 
-			jTwo := pTwoEven.AddJunction(greaterThan3Fn)
+			jTwo := NewJunction(greaterThan3Fn)
 			jTwo.AddPipeline(true, pThreeGt).AddPipeline(false, pThreeLe)
+			pTwoEven.AddJunction(jTwo)
 
 			p.Enqueue(3)
 			Expect(pThreeGt.Dequeue()).Should(Equal(8))
