@@ -224,13 +224,13 @@ var _ = Describe("Pipeline", func() {
 			pOne := NewPipeline()
 
 			pOne.AddPipe(subtractingPipe{})
-			routingFn := func(val interface{}) interface{} {
+			routingFn := RoutingFunc(func(val interface{}) interface{} {
 				i, _ := val.(int)
 				if i%2 == 0 {
 					return "even"
 				}
 				return "odd"
-			}
+			})
 			j := pOne.AddJunction(routingFn)
 			pTwoEven := NewPipeline()
 			pTwoEven.AddPipe(subtractingPipe{})
@@ -265,22 +265,23 @@ var _ = Describe("Pipeline", func() {
 			pThreeGt := NewPipeline(doublingPipe{})
 			pThreeLe := NewPipeline(subtractingPipe{})
 
-			evenOddFn := func(val interface{}) interface{} {
+			evenOddFn := RoutingFunc(func(val interface{}) interface{} {
 				if i, _ := val.(int); i%2 == 0 {
 					return "even"
 				}
 				return "odd"
-			}
+			})
 
 			jOne := p.AddJunction(evenOddFn)
 			jOne.AddPipeline("even", pTwoEven).AddPipeline("odd", pTwoOdd)
 
-			greaterThan3Fn := func(val interface{}) interface{} {
+			greaterThan3Fn := RoutingFunc(func(val interface{}) interface{} {
 				if i, _ := val.(int); i > 3 {
 					return true
 				}
 				return false
-			}
+			})
+
 			jTwo := pTwoEven.AddJunction(greaterThan3Fn)
 			jTwo.AddPipeline(true, pThreeGt).AddPipeline(false, pThreeLe)
 

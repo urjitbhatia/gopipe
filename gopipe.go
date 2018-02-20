@@ -86,7 +86,7 @@ func (p *Pipeline) AddPipe(pipe Pipe) *Pipeline {
 	return p
 }
 
-func (p *Pipeline) AddJunction(fn func(val interface{}) interface{}) *Junction {
+func (p *Pipeline) AddJunction(fn RoutingFunc) *Junction {
 	j := Junction{routingFn: fn, router: make(map[interface{}]*Pipeline)}
 	j.in = p.tail
 	go func() {

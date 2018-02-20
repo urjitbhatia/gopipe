@@ -17,3 +17,10 @@ func (j *Junction) AddPipeline(key interface{}, p *Pipeline) *Junction {
 	j.router[key] = p
 	return j
 }
+
+/*
+RoutingFunc takes in an item flowing through the pipeline and maps it to another item.
+The output item is used to then route data flowing through the Junction to the right
+pipeline attached to it
+*/
+type RoutingFunc func(in interface{}) interface{}
