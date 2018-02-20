@@ -26,10 +26,10 @@ func ExamplePipeline() {
 	// value is: 5
 }
 
-// ExamplePipelineEnqueueDequeue shows an alternative usage of Pipeline without channels directly.
+// ExampleEnqueue shows an alternative usage of Pipeline without channels directly.
 // Calling Enqueue will put an item in the pipeline and Dequeue will consume it. Both are blocking
 // operations.
-func ExamplePipelineEnqueueDequeue() {
+func ExampleEnqueue() {
 	max := 4
 	dp := doublingPipe{}
 	sp := subtractingPipe{}
@@ -53,9 +53,9 @@ func ExamplePipelineEnqueueDequeue() {
 	// Dequeue with timeout: <nil>
 }
 
-// ExamplePipelineJunction shows how to create a junction and route data across
+// ExampleJunction shows how to create a junction and route data across
 // the junction to other pipelines
-func ExamplePipelineJunction() {
+func ExampleJunction() {
 	max := 4
 	p := NewBufferedPipeline(max)
 	rf := RoutingFunc(func(in interface{}) interface{} {
