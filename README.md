@@ -23,6 +23,12 @@ pipeline := gopipe.NewPipeline(
   logWriterPipe
 )
 
+// Or Make a Buffered Pipeline
+// This allows up to bufSize elements to queue at *Each Pipe stage
+bufSize := 10
+// Buffersize 10 throughout the pipe
+bufP := gopipe.NewBufferedPipeline(bufSize, redisWriterPipe, logWriterPipe)
+
 // Attach some source
 jobs := make(chan interface{})
 pipeline.AttachSource(jobs)
@@ -30,32 +36,38 @@ pipeline.AttachSource(jobs)
 // Attach Sink
 processedJobs := make(chan interface{})
 pipeline.AttachSink(processedJobs)
+
+// Or Enqueue from somewhere (Block if the pipeline has no capacity)
+pipeline.Enqueue("foo")
+
+// And Dequeue (Blocks if nothing is flowing)
+bar := pipeline.Dequeue()
+
+// Dequeue with timeout
+baz := pipeline.DequeueTimeout(10 * time.Millisecond)
 ```
 
 # Complex pipelining
 
-You can also create a "routing" junction using pipes by using `AttachSinkFanOut` instead of a simple `AttachSink`.
-The first argument for this is a `map` of `channels` like:
+You can also create a "routing" junction and attach other Pipelines downstream.
 ```go
-chanfan := make(map[string]chan interface{})
-chanfan["smallishNumber"] = make(chan interface{})
-chanfan["biggishNumber"] = make(chan interface{})
 
-// Create an error/unrouted msg channel
-unroutedChan := make(chan interface{})
-
-// Create a routingFunction satisfying the interface: routingFunc func(interface{}) (string, error)
-routingFn := func(val interface{}) (string, error) {
+// Create a RoutingFunc func(interface{}) interface{}
+routingFn := RoutingFunc(func(val interface{}) interface{} {
   if val > 10 && val < 100 {
-    return "smallishNumber", nil
+    return "smallishNumber"
   } else if val >= 100 {
-    return "biggishNumber", nil
+    return "biggishNumber"
   }
   return "eh!", errors.New("dwarfnumber")
-}
+})
 
-// Now call the AttachSinkFanOut
-pipeline.AttachSinkFanOut(chanfan, unroutedChan, routingFn)
+// Create a junction
+j := NewJunction(routingFn)
+j.AddPipeline("smallishNumber", NewPipeline(smallNumPipe)).AddPipeline("biggishNumber", NewPipeline(bigNumPipe)
+
+// Now attach the junction - as soon as this is attached, data will start flowing
+pipeline.AddJunction(j)
 ```
 
 # Example Pipe:
@@ -79,11 +91,15 @@ func (dp doublingPipe) Process(in chan interface{}, out chan interface{}) {
 			if intval, ok := item.(int); ok {
 				out <- intval * 2
 			} else {
-      // This has the effect of "filtering" the input
-      // because its not passed down the pipeline anymore.
-			  log.Println("not ok")
+			  log.Println("not ok - filtering...")
 			}
 		}
 	}
 }
 ```
+
+# More Examples:
+
+- [See more examples](./gopipe_example_test.go)
+- [Various Pipe examples](./gopipe_stubs_for_test.go)
+- [More examples in tests](./gopipe_test.go)
