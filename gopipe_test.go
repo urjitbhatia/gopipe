@@ -2,105 +2,43 @@ package gopipe_test
 
 import (
 	"log"
+	"time"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 	. "github.com/urjitbhatia/gopipe"
 )
 
-type doublingPipe struct{}
-
-func (dp doublingPipe) Process(in chan interface{}, out chan interface{}) {
-	for {
-		select {
-		case item, more := <-in:
-			if !more {
-				log.Println("Pipe-in closed")
-				close(out)
-				return
-			}
-			if intval, ok := item.(int); ok {
-				out <- intval * 2
-			} else {
-				log.Println("not ok")
-			}
-		}
-	}
-}
-
-type subtractingPipe struct{}
-
-func (sp subtractingPipe) Process(in chan interface{}, out chan interface{}) {
-	for {
-		select {
-		case item, more := <-in:
-			if !more {
-				log.Println("Pipe-in closed")
-				close(out)
-				return
-			}
-			if intval, ok := item.(int); ok {
-				out <- intval - 1
-			} else {
-				log.Println("not ok")
-			}
-		}
-	}
-}
-
-func intGenerator(limit int) (out chan interface{}) {
-	out = make(chan interface{})
-	go func() {
-		defer close(out)
-		for i := 0; i < limit; i++ {
-			out <- i
-		}
-	}()
-	return
-}
-
-type pluralizingPipe struct{}
-
-func (pp pluralizingPipe) Process(in chan interface{}, out chan interface{}) {
-	for {
-		select {
-		case item, more := <-in:
-			if !more {
-				log.Println("Pipe-in closed")
-				close(out)
-				return
-			}
-			if strVal, ok := item.(string); ok {
-				out <- strVal + "s"
-			} else {
-				log.Println("unknown")
-			}
-		}
-	}
-}
-
-func animalGenerator(limit int) (out chan interface{}) {
-	out = make(chan interface{})
-	animals := []string{"cat", "dog", "toad", "dinosaur"}
-	go func() {
-		defer close(out)
-		for i := 0; i < limit; i++ {
-			out <- animals[i%len(animals)]
-		}
-	}()
-	return
-}
-
 var _ = Describe("Pipeline", func() {
 	log.SetOutput(GinkgoWriter)
-	Describe("Pipeline with a single pipe", func() {
+
+	Describe("without pipes", func() {
+		It("is just a channel", func() {
+			p := NewPipeline()
+			go p.Enqueue("foo")
+			Eventually(p.Dequeue).Should(Equal("foo"))
+			Expect(p.DequeueTimeout(1 * time.Millisecond)).Should(BeNil())
+		})
+
+		It("is just a channel with the right buffer size", func() {
+			p := NewBufferedPipeline(2)
+			p.Enqueue("foo")
+			p.Enqueue("bar")
+			Expect(p.Dequeue()).Should(Equal("foo"))
+			Expect(p.Dequeue()).Should(Equal("bar"))
+			Expect(p.DequeueTimeout(1 * time.Millisecond)).Should(BeNil())
+			p.Close()
+		})
+	})
+
+	Describe("Pipeline with test stub pipes", func() {
 		Context("Enque items", func() {
 			It("Dequeue", func() {
 				max := 20
 				dp := doublingPipe{}
 				sp := subtractingPipe{}
 				pipeline := NewPipeline(dp, sp)
-				pipeline.Debug()
+				pipeline.DebugMode = true
 
 				pipeinput := intGenerator(max)
 				pipeline.AttachSource(pipeinput)
@@ -172,10 +110,9 @@ var _ = Describe("Pipeline", func() {
 				go func() {
 					for animal := range pipeinput {
 						// Drain input and enque one by one
-						pipeline.EnqueueItem(animal)
+						pipeline.Enqueue(animal)
 					}
 					pipeline.Close()
-					return
 				}()
 
 				fanout := make(map[string]chan interface{})
@@ -226,7 +163,7 @@ var _ = Describe("Pipeline", func() {
 				// A second doubling pipe that we will attach to a tap
 				sp := subtractingPipe{}
 				pipeline := NewPipeline(dp, sp)
-				pipeline.Debug()
+				pipeline.DebugMode = true
 
 				pipeinput := intGenerator(max)
 				pipeline.AttachSource(pipeinput)
@@ -247,6 +184,121 @@ var _ = Describe("Pipeline", func() {
 		})
 	})
 
+	Describe("Add Pipe iterface", func() {
+		It("works", func() {
+			p := NewPipeline()
+			// Add two doubling pipes
+			p.AddPipe(doublingPipe{}).AddPipe(doublingPipe{})
+			p.Enqueue(2)
+
+			Expect(p.Dequeue()).Should(Equal(8))
+		})
+		It("is easy to add junctions", func() {
+			pOne := NewPipeline()
+
+			pOne.AddPipe(subtractingPipe{})
+			routingFn := func(val interface{}) interface{} {
+				i, _ := val.(int)
+				if i%2 == 0 {
+					return "even"
+				}
+				return "odd"
+			}
+			j := NewJunction(RoutingFunc(routingFn))
+			pTwoEven := NewPipeline()
+			pTwoEven.AddPipe(subtractingPipe{})
+
+			pTwoOdd := NewPipeline()
+			pTwoOdd.AddPipe(doublingPipe{})
+
+			j.AddPipeline("even", pTwoEven).AddPipeline("odd", pTwoOdd)
+			pOne.AddJunction(j)
+
+			pOne.Enqueue(3)
+			Expect(pTwoEven.Dequeue()).Should(Equal(1))
+
+			pOne.Enqueue(2)
+			Expect(pTwoOdd.Dequeue()).Should(Equal(2))
+		})
+
+		It("junction keeps works with bad routing fn", func() {
+			pOne := NewPipeline()
+
+			pOne.AddPipe(subtractingPipe{})
+			routingFn := func(val interface{}) interface{} {
+				i, _ := val.(int)
+				if i%2 == 0 {
+					return "even"
+				}
+				return "odd"
+			}
+			j := NewJunction(RoutingFunc(routingFn))
+			pTwoEven := NewPipeline()
+			pTwoEven.AddPipe(subtractingPipe{})
+
+			pTwoOdd := NewPipeline()
+			pTwoOdd.AddPipe(doublingPipe{})
+
+			j.AddPipeline("even", pTwoEven)
+			j.AddPipeline("this should've said odd", pTwoOdd)
+			pOne.AddJunction(j)
+
+			pOne.Enqueue(3)
+			Expect(pTwoEven.Dequeue()).Should(Equal(1))
+
+			pOne.Enqueue(2)
+			Eventually(func() interface{} {
+				return pTwoOdd.DequeueTimeout(1 * time.Millisecond)
+			}).ShouldNot(Equal(2))
+		})
+
+		It("works with multiple junctions in the pipeline", func() {
+			/*
+														|J| > 3	|-> double
+								 |J|even	|-> double	|J| <=3	|-> subtract
+				in -> subtract 1 |J|
+								 |J|odd		|-> subtract
+			*/
+			p := NewPipeline(subtractingPipe{})
+
+			pTwoEven := NewPipeline(doublingPipe{})
+			pTwoOdd := NewPipeline(subtractingPipe{})
+
+			pThreeGt := NewPipeline(doublingPipe{})
+			pThreeLe := NewPipeline(subtractingPipe{})
+
+			evenOddFn := RoutingFunc(func(val interface{}) interface{} {
+				if i, _ := val.(int); i%2 == 0 {
+					return "even"
+				}
+				return "odd"
+			})
+
+			jOne := NewJunction(evenOddFn)
+			jOne.AddPipeline("even", pTwoEven).AddPipeline("odd", pTwoOdd)
+			p.AddJunction(jOne)
+
+			greaterThan3Fn := RoutingFunc(func(val interface{}) interface{} {
+				if i, _ := val.(int); i > 3 {
+					return true
+				}
+				return false
+			})
+
+			jTwo := NewJunction(greaterThan3Fn)
+			jTwo.AddPipeline(true, pThreeGt).AddPipeline(false, pThreeLe)
+			pTwoEven.AddJunction(jTwo)
+
+			p.Enqueue(3)
+			Expect(pThreeGt.Dequeue()).Should(Equal(8))
+			p.Enqueue(1)
+			Expect(pThreeLe.Dequeue()).Should(Equal(-1))
+
+			p.Enqueue(2)
+			Expect(pTwoOdd.Dequeue()).Should(Equal(0))
+		})
+	})
+
 	Describe("Pipeline benchmarks", func() {
 		Context("benchmark - 500 samples of 10000 inputs", func() {
 			Measure("send messages through a buffered pipeline", func(b Benchmarker) {
@@ -263,17 +315,11 @@ var _ = Describe("Pipeline", func() {
 					pipeline.AttachSink(pipeout)
 
 					for start := 0; start < max; start += 1 {
-						select {
-						case val, more := <-pipeout:
-							if !more {
-								pipeout = nil
-							}
-							Expect(val).To(Equal((start * 2) - 1))
-						}
+						Expect(<-pipeout).To(Equal((start * 2) - 1))
 					}
 				})
 
-				Ω(runtime.Seconds()).Should(BeNumerically("<", 0.5), "Shouldn't take more than 0.5 sec for 10000 ops")
+				Ω(runtime.Seconds()).Should(BeNumerically("<", 0.5), "Shouldn't take more than 0.5 sec for 10000 items")
 			}, 500)
 		})
 	})

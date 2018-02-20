@@ -1,50 +1,90 @@
 package gopipe_test
 
 import (
-	"log"
+	"fmt"
+	"time"
 
 	. "github.com/urjitbhatia/gopipe"
 )
 
-type ExamplePipe struct{}
-
-func (ep ExamplePipe) Process(in chan interface{}, out chan interface{}) {
-	for {
-		select {
-		case item, more := <-in:
-			if !more {
-				log.Println("Pipe-in closed")
-				close(out)
-				return
-			}
-			if intval, ok := item.(int); ok {
-				out <- intval * 2
-			} else {
-				log.Println("not ok")
-			}
-		}
-	}
-}
-
 func ExamplePipeline() {
-	max := 20
-	ep := ExamplePipe{}
+	max := 4
+	dp := doublingPipe{}
 	sp := subtractingPipe{}
-	pipeline := NewPipeline(ep, sp)
+	pipeline := NewPipeline(dp, sp)
 
 	pipeinput := intGenerator(max)
 	pipeline.AttachSource(pipeinput)
 
-	pipeout := make(chan interface{})
-	pipeline.AttachSink(pipeout)
-
 	for i := 0; i < max; i += 1 {
-		select {
-		case val, more := <-pipeout:
-			if !more {
-				pipeout = nil
-			}
-			log.Println("value is:", val)
-		}
+		fmt.Printf("value is: %d\n", pipeline.Dequeue())
 	}
+	// Output:
+	// value is: -1
+	// value is: 1
+	// value is: 3
+	// value is: 5
+}
+
+// ExamplePipelineEnqueueDequeue shows an alternative usage of Pipeline without channels directly.
+// Calling Enqueue will put an item in the pipeline and Dequeue will consume it. Both are blocking
+// operations.
+func ExamplePipelineEnqueueDequeue() {
+	max := 4
+	dp := doublingPipe{}
+	sp := subtractingPipe{}
+	pipeline := NewBufferedPipeline(max, dp, sp)
+
+	for i := range intGenerator(max) {
+		pipeline.Enqueue(i)
+	}
+
+	for i := 0; i < max-1; i += 1 {
+		fmt.Printf("value is: %d\n", pipeline.Dequeue())
+	}
+	fmt.Printf("Dequeue valid with timeout: %v\n", pipeline.DequeueTimeout(1*time.Millisecond))
+	fmt.Printf("Dequeue with timeout: %v\n", pipeline.DequeueTimeout(1*time.Millisecond))
+
+	// Output:
+	// value is: -1
+	// value is: 1
+	// value is: 3
+	// Dequeue valid with timeout: 5
+	// Dequeue with timeout: <nil>
+}
+
+// ExamplePipelineJunction shows how to create a junction and route data across
+// the junction to other pipelines
+func ExamplePipelineJunction() {
+	max := 4
+	p := NewBufferedPipeline(max)
+	rf := RoutingFunc(func(in interface{}) interface{} {
+		if i, _ := in.(int); i > 2 {
+			return "big"
+		}
+		return "small"
+	})
+	j := NewJunction(rf)
+
+	dp := NewPipeline(doublingPipe{})
+	sp := NewPipeline(subtractingPipe{})
+
+	// If input is "small" send to doublingPipeline
+	// If input is "big" send to subtractingPipeline
+	j.AddPipeline("small", dp).AddPipeline("big", sp)
+	p.AddJunction(j)
+
+	for i := range intGenerator(max) {
+		p.Enqueue(i)
+	}
+
+	fmt.Println("Small pipeline got: ", dp.Dequeue())
+	fmt.Println("Small pipeline got: ", dp.Dequeue())
+	fmt.Println("Small pipeline got: ", dp.Dequeue())
+	fmt.Println("Big pipeline got: ", sp.Dequeue())
+	// Output:
+	// Small pipeline got:  0
+	// Small pipeline got:  2
+	// Small pipeline got:  4
+	// Big pipeline got:  2
 }
