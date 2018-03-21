@@ -46,7 +46,7 @@ var _ = Describe("Pipeline", func() {
 				pipeout := make(chan interface{})
 				pipeline.AttachSink(pipeout)
 
-				for start := 0; start < max; start += 1 {
+				for start := 0; start < max; start++ {
 					outVal := <-pipeout
 					Expect(outVal).To(Equal((start * 2) - 1))
 				}
@@ -71,7 +71,7 @@ var _ = Describe("Pipeline", func() {
 					}
 					return "", nil
 				})
-				for start := 0; start < max; start += 1 {
+				for start := 0; start < max; start++ {
 					select {
 					case val, more := <-fanout["dogs"]:
 						if !more {
@@ -126,7 +126,7 @@ var _ = Describe("Pipeline", func() {
 					}
 					return "", nil
 				})
-				for start := 0; start < max; start += 1 {
+				for start := 0; start < max; start++ {
 					select {
 					case val, more := <-fanout["dogs"]:
 						if !more {
@@ -174,7 +174,7 @@ var _ = Describe("Pipeline", func() {
 				pipeout := make(chan interface{})
 				pipeline.AttachSink(pipeout)
 
-				for start := 0; start < max; start += 1 {
+				for start := 0; start < max; start++ {
 					outVal := <-pipeout
 					tapVal := <-tapOut
 					Expect(outVal).To(Equal(tapVal))
@@ -314,7 +314,7 @@ var _ = Describe("Pipeline", func() {
 					pipeout := make(chan interface{})
 					pipeline.AttachSink(pipeout)
 
-					for start := 0; start < max; start += 1 {
+					for start := 0; start < max; start++ {
 						Expect(<-pipeout).To(Equal((start * 2) - 1))
 					}
 				})
