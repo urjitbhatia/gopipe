@@ -146,7 +146,7 @@ func NewBufferedPipeline(s int, pipes ...Pipe) *Pipeline {
 			tail:       h,
 		}
 	}
-	var tail chan interface{}
+	tail := make(chan interface{}, s)
 
 	globalHead := make(chan interface{}, s)
 	head := globalHead
