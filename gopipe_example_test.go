@@ -16,7 +16,7 @@ func ExamplePipeline() {
 	pipeinput := intGenerator(max)
 	pipeline.AttachSource(pipeinput)
 
-	for i := 0; i < max; i += 1 {
+	for i := 0; i < max; i++ {
 		fmt.Printf("value is: %d\n", pipeline.Dequeue())
 	}
 	// Output:
@@ -39,7 +39,7 @@ func ExampleEnqueue() {
 		pipeline.Enqueue(i)
 	}
 
-	for i := 0; i < max-1; i += 1 {
+	for i := 0; i < max-1; i++ {
 		fmt.Printf("value is: %d\n", pipeline.Dequeue())
 	}
 	fmt.Printf("Dequeue valid with timeout: %v\n", pipeline.DequeueTimeout(1*time.Millisecond))

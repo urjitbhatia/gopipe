@@ -6,26 +6,22 @@ import (
 
 type doublingPipe struct{}
 
-func (dp doublingPipe) Process(in chan interface{}, out chan interface{}) {
-	for item := range in {
-		if intval, ok := item.(int); ok {
-			out <- intval * 2
-		} else {
-			log.Println("not ok")
-		}
+func (dp doublingPipe) Process(in interface{}) (interface{}, bool) {
+	if intval, ok := in.(int); ok {
+		return intval * 2, true
 	}
+	log.Println("not ok")
+	return nil, false
 }
 
 type subtractingPipe struct{}
 
-func (sp subtractingPipe) Process(in chan interface{}, out chan interface{}) {
-	for item := range in {
-		if intval, ok := item.(int); ok {
-			out <- intval - 1
-		} else {
-			log.Println("not ok")
-		}
+func (sp subtractingPipe) Process(in interface{}) (interface{}, bool) {
+	if intval, ok := in.(int); ok {
+		return intval - 1, true
 	}
+	log.Println("not ok")
+	return nil, false
 }
 
 func intGenerator(limit int) (out chan interface{}) {
@@ -41,14 +37,12 @@ func intGenerator(limit int) (out chan interface{}) {
 
 type pluralizingPipe struct{}
 
-func (pp pluralizingPipe) Process(in chan interface{}, out chan interface{}) {
-	for item := range in {
-		if strVal, ok := item.(string); ok {
-			out <- strVal + "s"
-		} else {
-			log.Println("non-string input")
-		}
+func (pp pluralizingPipe) Process(in interface{}) (interface{}, bool) {
+	if strVal, ok := in.(string); ok {
+		return strVal + "s", true
 	}
+	log.Println("non-string input")
+	return nil, false
 }
 
 func animalGenerator(limit int) (out chan interface{}) {

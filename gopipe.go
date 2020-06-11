@@ -9,7 +9,7 @@ import (
 Pipe is a single component that processes items. Pipes can be composed to form a pipeline
 */
 type Pipe interface {
-	Process(in chan interface{}, out chan interface{})
+	Process(in interface{}) (out interface{}, next bool)
 }
 
 /*
@@ -80,7 +80,7 @@ This will immediately start routing items to this newly attached pipe
 func (p *Pipeline) AddPipe(pipe Pipe) *Pipeline {
 	oldTail := p.tail
 	newTail := make(chan interface{}, p.bufferSize)
-	go pipe.Process(oldTail, newTail)
+	startPipe(oldTail, newTail, pipe)
 	p.tail = newTail
 	return p
 }
@@ -152,7 +152,7 @@ func NewBufferedPipeline(s int, pipes ...Pipe) *Pipeline {
 	head := globalHead
 	for _, pipe := range pipes {
 		tail = make(chan interface{}, s)
-		go pipe.Process(head, tail)
+		startPipe(head, tail, pipe)
 		head = tail
 	}
 	return &Pipeline{bufferSize: s, head: globalHead, tail: tail}
@@ -165,4 +165,15 @@ If debugLog is true, logs state transitions to stdout.
 */
 func NewPipeline(pipes ...Pipe) *Pipeline {
 	return NewBufferedPipeline(0, pipes...)
+}
+
+func startPipe(head, tail chan interface{}, pipe Pipe) {
+	go func() {
+		for in := range head {
+			if out, next := pipe.Process(in); next {
+				tail <- out
+			}
+		}
+		close(tail)
+	}()
 }
